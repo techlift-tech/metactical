@@ -1,0 +1,60 @@
+<html>
+
+<head>
+
+</head>
+
+<body>
+    <div>
+        <input id="searchinput" placeholder="Enter Barcode or SKU">
+        <button id="searchbutton" onclick="test()">Search</button>
+    </div>
+    {% if columns %}
+    <div>
+        <table class="table table-bordered table-condensed">
+            <thead>
+                <tr>
+                    {% for column in columns %}
+                    <th class="text-center" data-fieldname="items" data-fieldtype="Table">
+                        {{column}}
+                    </th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in data %}
+                <tr>
+                    {% for value in row %}
+                    <td>
+                        {{value}}
+                    </td>
+                    {% endfor %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+    <script>
+        var input = document.getElementById("searchinput");
+
+        // Execute a function when the user releases a key on the keyboard
+        input.addEventListener("keyup", function (event) {
+            // Number 13 is the "Enter" key on the keyboard
+            if (event.keyCode === 13) {
+                // Cancel the default action, if needed
+                event.preventDefault();
+                // Trigger the button element with a click
+                document.getElementById("searchbutton").click();
+            }
+        });
+        function test() {
+            console.log("test")
+            var search_text = document.getElementById("searchinput").value
+            var new_url = `${window.location.origin}/itemsearch?searchtext=${search_text}`
+            window.location.href = new_url
+        }
+    </script>
+</body>
+
+</html>
