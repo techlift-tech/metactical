@@ -30,7 +30,10 @@ def get_items(search_value=""):
 			item_name,
 			stock_uom,
 			idx AS idx,
-			is_stock_item
+			is_stock_item,
+            ifw_retailskusuffix,
+            ifw_location,
+            variant_of
 		FROM
 			`tabItem`
 		WHERE
@@ -46,13 +49,13 @@ def get_items(search_value=""):
     )
 
     if items_data:
-        table_columns = ["Item Code", "Item Name"]
+        table_columns = ["RetailSKU Suffix", "Item Name", "Price"]
         table_data = []
         items = [d.item_code for d in items_data]
         item_prices_data = frappe.get_all(
             "Item Price",
             fields=["item_code", "price_list_rate", "currency"],
-            filters={"price_list": "Selling", "item_code": ["in", items]},
+            filters={"price_list": "Standard Selling", "item_code": ["in", items]},
         )
 
         item_prices, bin_data = {}, {}
@@ -86,17 +89,27 @@ def get_items(search_value=""):
 
         for warehouse in warehouses:
             table_columns.append(warehouse)
+        
+        table_columns.extend(["IFW_location", "ERPItemCode", "ERPNextTemplateSKU"])
 
         for item in items_data:
             item_row = []
             item_code = item.item_code
-            item_name = item.item_name            
-            item_row.extend([item_code, item_name])
+            item_name = item.item_name
+            retail_skusuffix = item.ifw_retailskusuffix
+            ifw_location = item.ifw_location   
+            variant_of = item.variant_of 
+            item_price = 0.0
+            if item_code in item_prices:
+                item_price = item_prices[item_code]["price_list_rate"]        
+            item_row.extend([retail_skusuffix, item_name, item_price])
             for warehouse in warehouses:
-                warehouse_qty = 0
+                warehouse_qty = 0.0
                 if item_code in warehouse_wise_items[warehouse]:
                     warehouse_qty = warehouse_wise_items[warehouse][item_code]
                 item_row.append(warehouse_qty)
+
+            item_row.extend([ifw_location, item_code, variant_of])
             table_data.append(item_row)
 
         res = {"data": table_data, "columns": table_columns}
@@ -121,7 +134,4 @@ def get_conditions(item_code, barcode):
     if barcode:
         return "name = {0}".format(frappe.db.escape(item_code))
 
-    return """(name like {item_code}
-		or item_name like {item_code})""".format(
-        item_code=frappe.db.escape("%" + item_code + "%")
-    )
+    return "ifw_retailskusuffix = {0}".format(frappe.db.escape(item_code))
