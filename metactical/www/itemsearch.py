@@ -134,4 +134,4 @@ def get_conditions(item_code, barcode):
     if barcode:
         return "name = {0}".format(frappe.db.escape(item_code))
 
-    return "ifw_retailskusuffix = {0}".format(frappe.db.escape(item_code))
+    return "ifw_retailskusuffix like {0}".format(item_code = frappe.db.escape('%' + item_code + '%'))
