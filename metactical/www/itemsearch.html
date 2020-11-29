@@ -15,7 +15,7 @@
                 id="searchinput" value="">
             </div>
             <div class="col">
-              <button type="submit" onclick="test()" class="btn btn-primary mb-2">Search</button>
+              <button type="submit" onclick="test()" id="searchbutton" class="btn btn-primary mb-2">Search</button>
             </div>
           </div>
       </div>
@@ -26,7 +26,7 @@
     {% if columns %}
     <div class="album py-5 bg-light">
       <div class="container">
-
+        <div class="table-responsive">
         <table class="table">
           <thead class="thead-dark">
             <tr>
@@ -47,7 +47,7 @@
             {% endfor %}
           </tbody>
         </table>
-
+      </div>
 
       </div>
     </div>

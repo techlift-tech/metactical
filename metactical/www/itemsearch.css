@@ -5,3 +5,12 @@
     padding: 5px 10px;
     border-radius: 5px;
 }
+.table .thead-dark th{
+    white-space: nowrap;
+}
+tbody td:nth-child(3){
+    text-align: right;
+}
+.container, .container-lg, .container-md, .container-sm, .container-xl{
+    max-width: 98%;
+}
