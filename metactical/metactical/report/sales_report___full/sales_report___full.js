@@ -11,7 +11,7 @@ frappe.query_reports["Sales Report - Full"] = {
 			options: ["Customer Group","Customer","Item Group","Item","Territory","Order Type"],
 			default: "Item",
 			reqd: 1,
-			hidden: 1
+			hidden: 1,
 		},
 		{
 			fieldname: "doc_type",
@@ -30,7 +30,7 @@ frappe.query_reports["Sales Report - Full"] = {
 				{ "value": "Value", "label": __("Value") },
 				{ "value": "Quantity", "label": __("Quantity") },
 			],
-			default: "Qty",
+			default: "Quantity",
 			reqd: 1,
 			hidden: 1
 		},
@@ -40,7 +40,7 @@ frappe.query_reports["Sales Report - Full"] = {
 			fieldtype: "Date",
 			default: frappe.defaults.get_user_default("year_start_date"),
 			reqd: 1,
-			hidden: 1
+			hidden: 0
 		},
 		{
 			fieldname:"to_date",
@@ -48,7 +48,7 @@ frappe.query_reports["Sales Report - Full"] = {
 			fieldtype: "Date",
 			default: frappe.defaults.get_user_default("year_end_date"),
 			reqd: 1,
-			hidden: 1
+			hidden: 0
 		},
 		{
 			fieldname: "company",
@@ -57,7 +57,7 @@ frappe.query_reports["Sales Report - Full"] = {
 			options: "Company",
 			default: frappe.defaults.get_user_default("Company"),
 			reqd: 1,
-			hidden: 1
+			hidden: 0
 		},
 		{
 			fieldname: "range",
@@ -71,7 +71,7 @@ frappe.query_reports["Sales Report - Full"] = {
 			],
 			default: "Monthly",
 			reqd: 1,
-			hidden: 1
+			hidden: 0
 		}
 	],
 }
