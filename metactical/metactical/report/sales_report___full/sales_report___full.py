@@ -16,43 +16,11 @@ def execute(filters=None):
 class Analytics(object):
     def __init__(self, filters=None):
         self.filters = frappe._dict(filters or {})
-        self.date_field = (
-            "transaction_date"
-            if self.filters.doc_type in ["Sales Order", "Purchase Order"]
-            else "posting_date"
-        )
-        self.months = [
-            "January",
-            "February",
-            "March",
-            "April",
-            "May",
-            "June",
-            "July",
-            "August",
-            "September",
-            "October",
-            "November",
-            "December",
-        ]
-        self.get_period_date_ranges()
 
     def run(self):
         self.get_columns()
         self.get_data()
-        self.get_chart_data()
-
-        # Skipping total row for tree-view reports
         skip_total_row = 0
-
-        if self.filters.tree_type in [
-            "Supplier Group",
-            "Item Group",
-            "Customer Group",
-            "Territory",
-        ]:
-            skip_total_row = 1
-
         return self.columns, self.data, None, None, None, skip_total_row
 
     def get_columns(self):
@@ -64,564 +32,274 @@ class Analytics(object):
                 "width": 140,
             },
             {
-                "label": "ERPNextitemCode"
-                if self.filters.tree_type == "Item"
-                else (self.filters.tree_type + " ID"),
-                "options": self.filters.tree_type
-                if self.filters.tree_type != "Order Type"
-                else "",
+                "label": "ERPNextitemCode",
+                "options": "Item",
                 "fieldname": "entity",
-                "fieldtype": "Link"
-                if self.filters.tree_type != "Order Type"
-                else "Data",
-                "width": 140 if self.filters.tree_type != "Order Type" else 200,
+                "fieldtype": "Link",
+                "width": 100,
+                "align": "left"
+            },
+            {
+                "label": _("Barcode"),
+                "fieldname": "barcode",
+                "fieldtype": "Data",
+                "width": 100,
+                "align": "left"
+            },
+            {
+                "label": _("Item Name"),
+                "fieldname": "entity_name",
+                "fieldtype": "Data",
+                "width": 300,
+            },
+            {
+                "label": _("Tags"),
+                "fieldname": "item_tags",
+                "fieldtype": "Data",
+                "width": 100,
+            },
+            {
+                "label": _("Rate"),
+                "fieldname": "rate",
+                "fieldtype": "Currency",
+                "width": 100,
+            },
+            {
+                "label": _("Discointinued"),
+                "fieldname": "item_discontinued",
+                "fieldtype": "Boolean",
+                "width": 100,
+                "default": False,
+            },
+            {
+                "label": _("ETA"),
+                "fieldname": "eta",
+                "fieldtype": "Date",
+                "width": 100,
+            },
+            {
+                "label": _("DateLastReceived"),
+                "fieldname": "date_last_received",
+                "fieldtype": "DateTime",
+                "width": 200,
+            },
+            {
+                "label": _("Cost"),
+                "fieldname": "item_cost",
+                "fieldtype": "Currency",
+                "width": 100,
+            },
+            {
+                "label": _("Suplier SKU"),
+                "fieldname": "supplier_sku",
+                "fieldtype": "Data",
+                "width": 100,
+            },
+            {
+                "label": _("Supplier Name"),
+                "fieldname": "supplier_name",
+                "fieldtype": "Link",
+                "options": "Supplier",
+                "width": 200,
+            },
+            {
+                "label": _("TotalQOH"),
+                "fieldname": "total_actual_qty",
+                "fieldtype": "Data",
+                "width": 140,
+            },
+            {
+                "label": _("Material Request"),
+                "fieldname": "material_request",
+                "fieldtype": "Data",
+                "width": 140,
+            },
+            {
+                "label": _("Expected PO Nos"),
+                "fieldname": "expected_pos",
+                "fieldtype": "Data",
+                "width": 140,
+            },
+            {
+                "label": _("ETA date PO"),
+                "fieldname": "eta_po",
+                "fieldtype": "Data",
+                "width": 140,
+            },
+            {
+                "label": _("PreviousYSale"),
+                "fieldname": "previous_year_sale",
+                "fieldtype": "Float",
+                "width": 140,
+            },
+            {
+                "label": _("CurrentYearSales"),
+                "fieldname": "total",
+                "fieldtype": "Float",
+                "width": 140,
+            },
+            {
+                "label": _("TotalSold12Months"),
+                "fieldname": "last_twelve_months",
+                "fieldtype": "Float",
+                "width": 140,
             },
         ]
 
-        if self.filters.tree_type == "Item":
-            self.columns.extend(
-                [
-                    {
-                        "label": _("Barcode"),
-                        "fieldname": "barcode",
-                        "fieldtype": "Data",
-                        "width": 100,
-                    },
-                ]
-            )
-
-        if self.filters.tree_type in ["Customer", "Supplier", "Item"]:
+        month_field_names = {
+            "January": "jan",
+            "February": "feb",
+            "March": "mar",
+            "April": "apr",
+            "May": "may",
+            "June": "jun",
+            "July": "jul",
+            "August": "aug",
+            "September": "sep",
+            "October": "oct",
+            "November": "nov",
+            "December": "dece",
+        }
+        current_year = frappe.utils.datetime.datetime.today().year
+        for month_name in month_field_names:
             self.columns.append(
                 {
-                    "label": _(self.filters.tree_type + " Name"),
-                    "fieldname": "entity_name",
-                    "fieldtype": "Data",
-                    "width": 140,
-                }
-            )
-
-        if self.filters.tree_type == "Item":
-            self.columns.extend(
-                [
-                    {
-                        "label": _("Tags"),
-                        "fieldname": "item_tags",
-                        "fieldtype": "Data",
-                        "width": 100,
-                    },
-                    {
-                        "label": _("Rate"),
-                        "fieldname": "item_price",
-                        "fieldtype": "Currency",
-                        "width": 100,
-                    },
-                    {
-                        "label": _("Discointinued"),
-                        "fieldname": "item_discontinued",
-                        "fieldtype": "Boolean",
-                        "width": 100,
-                        "default": False,
-                    },
-                    {
-                        "label": _("ETA"),
-                        "fieldname": "eta",
-                        "fieldtype": "Date",
-                        "width": 100,
-                    },
-                    {
-                        "label": _("DateLastReceived"),
-                        "fieldname": "date_last_received",
-                        "fieldtype": "DateTime",
-                        "width": 200,
-                    },
-                    {
-                        "label": _("Cost"),
-                        "fieldname": "item_cost",
-                        "fieldtype": "Currency",
-                        "width": 100,
-                    },
-                    {
-                        "label": _("Suplier SKU"),
-                        "fieldname": "supplier_sku",
-                        "fieldtype": "Data",
-                        "width": 100,
-                    },
-                    {
-                        "label": _("Supplier Name"),
-                        "fieldname": "supplier_name",
-                        "fieldtype": "Link",
-                        "options": "Supplier",
-                        "width": 200,
-                    },
-                    {
-                        "label": _("Material Request"),
-                        "fieldname": "material_request",
-                        "fieldtype": "Data",
-                        "width": 140,
-                    },
-                    {
-                        "label": _("Expected PO Nos"),
-                        "fieldname": "expected_pos",
-                        "fieldtype": "Data",
-                        "width": 140,
-                    },
-                    {
-                        "label": _("ETA date PO"),
-                        "fieldname": "eta_po",
-                        "fieldtype": "Data",
-                        "width": 140,
-                    },
-                    {
-                        "label": _("PreviousYSale"),
-                        "fieldname": "previous_year_sale",
-                        "fieldtype": "Float",
-                        "width": 140,
-                    },
-                    {
-                        "label": _("CurrentYearSales"),
-                        "fieldname": "total",
-                        "fieldtype": "Float",
-                        "width": 140,
-                    },
-                    {
-                        "label": _("TotalSold12Months"),
-                        "fieldname": "twelve_month_year_sale",
-                        "fieldtype": "Float",
-                        "width": 140,
-                    },
-                ]
-            )
-
-        for end_date in self.periodic_daterange:
-            period = self.get_period(end_date)
-            self.columns.append(
-                {
-                    "label": _(period),
-                    "fieldname": scrub(period),
+                    "label": _(str(current_year) + "_Sold" + month_name),
+                    "fieldname": month_field_names[month_name],
                     "fieldtype": "Float",
                     "width": 120,
                 }
             )
-
-        if self.filters.tree_type == "Item":
-            self.columns.extend(
-                [
-                    {
-                        "label": _("SoldLast10Days"),
-                        "fieldname": "sold_last_ten_days",
-                        "fieldtype": "Float",
-                        "width": 140,
-                    },
-                    {
-                        "label": _("SoldLast30Days"),
-                        "fieldname": "sold_last_thirty_days",
-                        "fieldtype": "Float",
-                        "width": 140,
-                    },
-                    {
-                        "label": _("SoldLast60Days"),
-                        "fieldname": "sold_last_sixty_days",
-                        "fieldtype": "Float",
-                        "width": 140,
-                        "default": False,
-                    },
-                    {
-                        "label": _("DateLastSold"),
-                        "fieldname": "last_sold_date",
-                        "fieldtype": "Date",
-                        "width": 100,
-                    },
-                ]
-            )
-
+        self.columns.extend(
+            [
+                {
+                    "label": _("SoldLast10Days"),
+                    "fieldname": "sold_last_ten_days",
+                    "fieldtype": "Float",
+                    "width": 140,
+                },
+                {
+                    "label": _("SoldLast30Days"),
+                    "fieldname": "sold_last_thirty_days",
+                    "fieldtype": "Float",
+                    "width": 140,
+                },
+                {
+                    "label": _("SoldLast60Days"),
+                    "fieldname": "sold_last_sixty_days",
+                    "fieldtype": "Float",
+                    "width": 140,
+                    "default": False,
+                },
+                {
+                    "label": _("DateLastSold"),
+                    "fieldname": "last_sold_date",
+                    "fieldtype": "Date",
+                    "width": 100,
+                },
+            ]
+        )
 
     def get_data(self):
-        if self.filters.tree_type in ["Customer", "Supplier"]:
-            self.get_sales_transactions_based_on_customers_or_suppliers()
-            self.get_rows()
-
-        elif self.filters.tree_type == "Item":
-            self.get_sales_transactions_based_on_items()
-            self.get_rows()
-
-        elif self.filters.tree_type in [
-            "Customer Group",
-            "Supplier Group",
-            "Territory",
-        ]:
-            self.get_sales_transactions_based_on_customer_or_territory_group()
-            self.get_rows_by_group()
-
-        elif self.filters.tree_type == "Item Group":
-            self.get_sales_transactions_based_on_item_group()
-            self.get_rows_by_group()
-
-        elif self.filters.tree_type == "Order Type":
-            if self.filters.doc_type != "Sales Order":
-                self.data = []
-                return
-            self.get_sales_transactions_based_on_order_type()
-            self.get_rows_by_group()
-
-    def get_sales_transactions_based_on_order_type(self):
-        if self.filters["value_quantity"] == "Value":
-            value_field = "base_net_total"
-        else:
-            value_field = "total_qty"
-
-        self.entries = frappe.db.sql(
-            """ select s.order_type as entity, s.{value_field} as value_field, s.{date_field}
-			from `tab{doctype}` s where s.docstatus = 1 and s.company = %s and s.{date_field} between %s and %s
-			and ifnull(s.order_type, '') != '' order by s.order_type
-		""".format(
-                date_field=self.date_field,
-                value_field=value_field,
-                doctype=self.filters.doc_type,
-            ),
-            (self.filters.company, self.filters.from_date, self.filters.to_date),
-            as_dict=1,
+        current_date = frappe.utils.datetime.date.today()
+        start_date = current_date.replace(day=1, month=1, year=current_date.year-1)
+        end_date = start_date.replace(month=12, day=31, year=start_date.year+1)
+        query = """                
+                SELECT sit.item_code,
+                    SUM(CASE when YEAR(si.posting_date) = YEAR(CURRENT_DATE()) then sit.stock_qty else 0 end) total,
+                    SUM(CASE when YEAR(si.posting_date) = YEAR(CURRENT_DATE())-1 then sit.stock_qty else 0 end) previous_year_sale,
+                    SUM(CASE when DATEDIFF(CURRENT_DATE(), si.posting_date) <= 10 then sit.stock_qty else 0 end) sold_last_ten_days,
+                    SUM(CASE when DATEDIFF(CURRENT_DATE(), si.posting_date) <= 30 then sit.stock_qty else 0 end) sold_last_thirty_days,
+                    SUM(CASE when DATEDIFF(CURRENT_DATE(), si.posting_date) <= 60 then sit.stock_qty else 0 end) sold_last_sixty_days,
+                    SUM(CASE when DATEDIFF(CURRENT_DATE(), si.posting_date) <= 365 then sit.stock_qty else 0 end) last_twelve_months,
+                    MAX(si.posting_date) as last_sold_date,
+                    SUM(CASE when (MONTH(si.posting_date) = 1 and (YEAR(si.posting_date) = YEAR(CURRENT_DATE()))) then sit.stock_qty else 0 end) jan,
+                    SUM(CASE when (MONTH(si.posting_date) = 2 and (YEAR(si.posting_date) = YEAR(CURRENT_DATE()))) then sit.stock_qty else 0 end) feb,
+                    SUM(CASE when (MONTH(si.posting_date) = 3 and (YEAR(si.posting_date) = YEAR(CURRENT_DATE()))) then sit.stock_qty else 0 end) mar,
+                    SUM(CASE when (MONTH(si.posting_date) = 4 and (YEAR(si.posting_date) = YEAR(CURRENT_DATE()))) then sit.stock_qty else 0 end) apr,
+                    SUM(CASE when (MONTH(si.posting_date) = 5 and (YEAR(si.posting_date) = YEAR(CURRENT_DATE()))) then sit.stock_qty else 0 end) may,
+                    SUM(CASE when (MONTH(si.posting_date) = 6 and (YEAR(si.posting_date) = YEAR(CURRENT_DATE()))) then sit.stock_qty else 0 end) jun,
+                    SUM(CASE when (MONTH(si.posting_date) = 7 and (YEAR(si.posting_date) = YEAR(CURRENT_DATE()))) then sit.stock_qty else 0 end) jul,
+                    SUM(CASE when (MONTH(si.posting_date) = 8 and (YEAR(si.posting_date) = YEAR(CURRENT_DATE()))) then sit.stock_qty else 0 end) aug,
+                    SUM(CASE when (MONTH(si.posting_date) = 9 and (YEAR(si.posting_date) = YEAR(CURRENT_DATE()))) then sit.stock_qty else 0 end) sep,
+                    SUM(CASE when (MONTH(si.posting_date) = 10 and (YEAR(si.posting_date) = YEAR(CURRENT_DATE()))) then sit.stock_qty else 0 end) oct,
+                    SUM(CASE when (MONTH(si.posting_date) = 11 and (YEAR(si.posting_date) = YEAR(CURRENT_DATE()))) then sit.stock_qty else 0 end) nov,
+                    SUM(CASE when (MONTH(si.posting_date) = 12 and (YEAR(si.posting_date) = YEAR(CURRENT_DATE()))) then sit.stock_qty else 0 end) dece,
+                    GROUP_CONCAT(DISTINCT mri1.name) as material_request,
+                    GROUP_CONCAT(DISTINCT poi1.po_detail SEPARATOR ', ') as expected_pos,
+                    GROUP_CONCAT(DISTINCT poi1.po_eta SEPARATOR ', ') as eta_po,
+                    ib1.barcode as barcode,
+                    IFNULL(SUM(bin1.actual_qty),0) as total_actual_qty,
+                    pit1.last_pi_date as date_last_received,
+                    pit1.rate as item_cost,
+                    ip1.price_list_rate as rate,
+                    is1.supplier as supplier_name,
+                    is1.supplier_part_no as supplier_sku,
+                    it.ifw_retailskusuffix as ifw_retailskusuffix,
+                    sit.item_code as entity,
+                    sit.item_name as entity_name,
+                    sit.stock_uom,
+                    sit.stock_qty as value_field,
+                    si.posting_date 
+                FROM `tabSales Invoice Item` sit 
+                    LEFT JOIN `tabSales Invoice` si ON si.name = sit.parent 
+                    LEFT JOIN `tabItem` it ON it.item_code = sit.item_code 
+                    LEFT JOIN (select mri.item_code, mr.name, mr.status from `tabMaterial Request Item` mri LEFT JOIN `tabMaterial Request` mr on mri.parent = mr.name 
+                    where mr.status in ("Submitted", "Pending", "Partially Ordered") and (mri.qty - mri.received_qty) > 0) mri1 on mri1.item_code = sit.item_code
+                    LEFT JOIN (select poi.item_code, (poi.qty - poi.received_qty) as to_receive_qty, CONCAT(po.name,"(",(poi.qty - poi.received_qty) DIV 1,")","[",poi.schedule_date,"]") as po_detail,
+                    CONCAT(po.name," ","[",poi.schedule_date,"]") as po_eta,
+                    po.status from `tabPurchase Order Item` poi LEFT JOIN `tabPurchase Order` po on poi.parent = po.name 
+                    where po.status in ("To Receive and Bill", "To Receive") and (poi.qty - poi.received_qty) > 0) poi1 on poi1.item_code = sit.item_code
+                    LEFT JOIN (select bin.item_code, bin.warehouse, sum(bin.actual_qty) as actual_qty from `tabBin` bin where 
+                    bin.warehouse in ("R01-Gor-Active Stock - ICL", "R05-DTN-Active Stock - ICL", "R07-Queen-Active Stock - ICL", "R06-AMB-Active Stock - ICL", "R04-Mon-Active Stock - ICL"
+                    "R03-Vic-Active Stock - ICL", "R01-Gor-Active Stock - ICL", "R02-Edm-Active Stock - ICL") and bin.actual_qty > 0 group by bin.item_code, bin.warehouse) bin1 on bin1.item_code = sit.item_code
+                    LEFT JOIN (        
+                        SELECT pit.name,
+                            CONCAT(pi.posting_date, " ", pi.posting_date) AS last_pi_date,
+                            pit.rate,
+                            pit.item_code,
+                            max(pit.creation) 
+                        FROM `tabPurchase Invoice Item` pit,
+                            `tabPurchase Invoice` pi 
+                        WHERE pit.docstatus = 1 
+                            AND pi.docstatus = 1 
+                            AND pit.parent = pi.name 
+                        GROUP BY item_code 
+                    ) AS pit1 ON pit1.item_code = sit.item_code 
+                    LEFT JOIN (        
+                        SELECT parent,
+                            barcode,
+                            min(creation) 
+                        FROM `tabItem Barcode` ib 
+                        GROUP BY ib.parent 
+                    ) AS ib1 ON ib1.parent = sit.item_code 
+                    LEFT JOIN (
+                        SELECT ip.price_list_rate,
+                            max(ip.creation),
+                            ip.item_code AS item_code 
+                        FROM `tabItem Price` ip 
+                        WHERE ip.selling = 1 
+                            AND ip.price_list = "RET - Camo" 
+                        GROUP BY ip.item_code 
+                    ) AS ip1 ON ip1.item_code = sit.item_code 
+                    LEFT JOIN (        
+                        SELECT its.supplier_part_no,
+                            its.supplier,
+                            its.parent,
+                            min(its.creation) 
+                        FROM `tabItem Supplier` its 
+                        GROUP BY its.parent 
+                    ) is1 ON is1.parent = sit.item_code 
+                WHERE si.company = "{company}" 
+                    AND si.posting_date between "{from_date}" AND "{to_date}" 
+                    AND sit.docstatus = 1
+                GROUP BY sit.item_code
+                ORDER BY sit.item_code,
+                    si.posting_date DESC;
+        """.format(
+            company=frappe.utils.get_defaults("company"),
+            from_date=str(start_date),
+            to_date=str(end_date),
         )
-
-        self.get_teams()
-
-    def get_sales_transactions_based_on_customers_or_suppliers(self):
-        if self.filters["value_quantity"] == "Value":
-            value_field = "base_net_total as value_field"
-        else:
-            value_field = "total_qty as value_field"
-
-        if self.filters.tree_type == "Customer":
-            entity = "customer as entity"
-            entity_name = "customer_name as entity_name"
-        else:
-            entity = "supplier as entity"
-            entity_name = "supplier_name as entity_name"
-
-        self.entries = frappe.get_all(
-            self.filters.doc_type,
-            fields=[entity, entity_name, value_field, self.date_field],
-            filters={
-                "docstatus": 1,
-                "company": self.filters.company,
-                self.date_field: (
-                    "between",
-                    [self.filters.from_date, self.filters.to_date],
-                ),
-            },
-        )
-
-        self.entity_names = {}
-        for d in self.entries:
-            self.entity_names.setdefault(d.entity, d.entity_name)
-
-    def get_sales_transactions_based_on_items(self):
-
-        if self.filters["value_quantity"] == "Value":
-            value_field = "base_amount"
-        else:
-            value_field = "stock_qty"
-
-        self.entries = frappe.db.sql(
-            """
-			select (select barcode from `tabItem Barcode` where parent = it.name limit 1) as barcode, 
-            (select price_list_rate from `tabItem Price` where item_code = it.item_code and price_list = "RET - Camo" and selling = 1 limit 1) as rate,
-            (select CONCAT(pi.posting_date, " ", pi.posting_time) from `tabPurchase Invoice Item` pit, `tabPurchase Invoice` pi where pit.item_code = it.item_code
-            and pit.parent = pi.name and pit.docstatus = 1 order by pi.posting_date DESC limit 1) as date_last_received,
-            (select pit.rate from `tabPurchase Invoice Item` pit where pit.docstatus = 1 and pit.item_code = it.item_code 
-            order by pit.creation DESC limit 1) as item_cost,
-            (select supplier_part_no from `tabItem Supplier` where parent = it.name limit 1) as supplier_sku,
-            (select supplier from `tabItem Supplier` where parent = it.name limit 1) as supplier_name,
-            it.ifw_retailskusuffix as ifw_retailskusuffix, i.item_code as entity, i.item_name as entity_name, i.stock_uom, i.{value_field} as value_field, s.{date_field}
-			from `tab{doctype} Item` i , `tab{doctype}` s, `tabItem` it
-			where s.name = i.parent and i.docstatus = 1 and s.company = %s
-			and s.{date_field} between %s and %s and it.item_code = i.item_code
-            order by entity, s.{date_field} DESC
-		""".format(
-                date_field=self.date_field,
-                value_field=value_field,
-                doctype=self.filters.doc_type,
-            ),
-            (self.filters.company, self.filters.from_date, self.filters.to_date),
-            as_dict=1,
-        )
-
-        self.entity_names = {}
-        for d in self.entries:
-            self.entity_names.setdefault(d.entity, d.entity_name)
-
-    def get_sales_transactions_based_on_customer_or_territory_group(self):
-        if self.filters["value_quantity"] == "Value":
-            value_field = "base_net_total as value_field"
-        else:
-            value_field = "total_qty as value_field"
-
-        if self.filters.tree_type == "Customer Group":
-            entity_field = "customer_group as entity"
-        elif self.filters.tree_type == "Supplier Group":
-            entity_field = "supplier as entity"
-            self.get_supplier_parent_child_map()
-        else:
-            entity_field = "territory as entity"
-
-        self.entries = frappe.get_all(
-            self.filters.doc_type,
-            fields=[entity_field, value_field, self.date_field],
-            filters={
-                "docstatus": 1,
-                "company": self.filters.company,
-                self.date_field: (
-                    "between",
-                    [self.filters.from_date, self.filters.to_date],
-                ),
-            },
-        )
-        self.get_groups()
-
-    def get_sales_transactions_based_on_item_group(self):
-        if self.filters["value_quantity"] == "Value":
-            value_field = "base_amount"
-        else:
-            value_field = "qty"
-
-        self.entries = frappe.db.sql(
-            """
-			select i.item_group as entity, i.{value_field} as value_field, s.{date_field}
-			from `tab{doctype} Item` i , `tab{doctype}` s
-			where s.name = i.parent and i.docstatus = 1 and s.company = %s
-			and s.{date_field} between %s and %s
-		""".format(
-                date_field=self.date_field,
-                value_field=value_field,
-                doctype=self.filters.doc_type,
-            ),
-            (self.filters.company, self.filters.from_date, self.filters.to_date),
-            as_dict=1,
-        )
-
-        self.get_groups()
-
-    def get_rows(self):
-        self.data = []
-        self.get_periodic_data()
-
-        for entity, period_data in iteritems(self.entity_periodic_data):
-            row = {"entity": entity, "entity_name": self.entity_names.get(entity)}
-            total = 0
-            for end_date in self.periodic_daterange:
-                period = self.get_period(end_date)
-                amount = flt(period_data.get(period, 0.0))
-                row[scrub(period)] = amount
-                total += amount
-
-            row["total"] = total
-
-            if self.filters.tree_type == "Item":
-                row["stock_uom"] = period_data.get("stock_uom")
-                row["ifw_retailskusuffix"] = period_data.get("ifw_retailskusuffix")
-                row["last_sold_date"] = period_data.get("last_sold_date")
-                row["sold_last_ten_days"] = period_data.get("age_sold")[10]
-                row["sold_last_thirty_days"] = period_data.get("age_sold")[30]
-                row["sold_last_sixty_days"] = period_data.get("age_sold")[60]
-                row["barcode"] = period_data.get("barcode")
-                row["date_last_received"] = period_data.get("date_last_received")
-                row["item_cost"] = period_data.get("item_cost")
-                row["supplier_sku"] = period_data.get("supplier_sku")
-                row["supplier_name"] = period_data.get("supplier_name")
-                row["previous_year_sale"] = period_data.get("previous_year_sale")
-
-            self.data.append(row)
-
-    def get_rows_by_group(self):
-        self.get_periodic_data()
-        out = []
-
-        for d in reversed(self.group_entries):
-            row = {"entity": d.name, "indent": self.depth_map.get(d.name)}
-            total = 0
-            for end_date in self.periodic_daterange:
-                period = self.get_period(end_date)
-                amount = flt(self.entity_periodic_data.get(d.name, {}).get(period, 0.0))
-                row[scrub(period)] = amount
-                if d.parent and (
-                    self.filters.tree_type != "Order Type" or d.parent == "Order Types"
-                ):
-                    self.entity_periodic_data.setdefault(
-                        d.parent, frappe._dict()
-                    ).setdefault(period, 0.0)
-                    self.entity_periodic_data[d.parent][period] += amount
-                total += amount
-
-            row["total"] = total
-            out = [row] + out
-
-        self.data = out
-
-    def get_periodic_data(self):
-        self.entity_periodic_data = frappe._dict()
-
-        last_sold_date_map = {}
-        current_year = frappe.utils.datetime.date.today().year
-        for d in self.entries:
-            if self.filters.tree_type == "Supplier Group":
-                d.entity = self.parent_child_map.get(d.entity)
-            if current_year == d.get(self.date_field).year:
-                period = self.get_period(d.get(self.date_field))
-                self.entity_periodic_data.setdefault(d.entity, frappe._dict()).setdefault(
-                    period, 0.0
-                )
-                self.entity_periodic_data[d.entity][period] += flt(d.value_field)
-
-            if self.filters.tree_type == "Item":
-                self.entity_periodic_data[d.entity].setdefault("previous_year_sale", 0.0)
-                self.entity_periodic_data[d.entity].setdefault("last_sold_date", d.posting_date)
-                self.entity_periodic_data[d.entity].setdefault("age_sold", frappe._dict()).setdefault(
-                    10, 0.0
-                )
-                self.entity_periodic_data[d.entity].setdefault("age_sold", frappe._dict()).setdefault(
-                    30, 0.0
-                )
-                self.entity_periodic_data[d.entity].setdefault("age_sold", frappe._dict()).setdefault(
-                    60, 0.0
-                )
-                
-                if d.get(self.date_field).year == current_year - 1:
-                    self.entity_periodic_data[d.entity].previous_year_sale += flt(d.value_field)
-                age = (frappe.utils.datetime.date.today() - d.posting_date).days
-                
-                if age <= 10:
-                    self.entity_periodic_data[d.entity].age_sold[10] += flt(d.value_field)
-                if age <= 30:
-                    self.entity_periodic_data[d.entity].age_sold[30] += flt(d.value_field)
-                if age <= 60:
-                    self.entity_periodic_data[d.entity].age_sold[60] += flt(d.value_field)
-
-                self.entity_periodic_data[d.entity]["stock_uom"] = d.stock_uom
-                self.entity_periodic_data[d.entity].setdefault("barcode", d.barcode)
-                self.entity_periodic_data[d.entity].setdefault("item_cost", d.item_cost)
-                self.entity_periodic_data[d.entity].setdefault("supplier_sku", d.supplier_sku)
-                self.entity_periodic_data[d.entity].setdefault("supplier_name", d.supplier_name)
-                self.entity_periodic_data[d.entity].setdefault("date_last_received", d.date_last_received)
-                self.entity_periodic_data[d.entity][
-                    "ifw_retailskusuffix"
-                ] = d.ifw_retailskusuffix
-
-    def get_period(self, posting_date):
-        if self.filters.range == "Weekly":
-            period = (
-                "Week "
-                + str(posting_date.isocalendar()[1])
-                + " "
-                + str(posting_date.year)
-            )
-        elif self.filters.range == "Monthly":
-            period = (
-                str(posting_date.year)
-                + "_Sold"
-                + str(self.months[posting_date.month - 1])
-            )
-        elif self.filters.range == "Quarterly":
-            period = (
-                "Quarter "
-                + str(((posting_date.month - 1) // 3) + 1)
-                + " "
-                + str(posting_date.year)
-            )
-        else:
-            year = get_fiscal_year(posting_date, company=self.filters.company)
-            period = str(year[0])
-        return period
-
-    def get_period_date_ranges(self):
-        from dateutil.relativedelta import relativedelta, MO
-
-        from_date, to_date = getdate(self.filters.from_date), getdate(
-            self.filters.to_date
-        )
-
-        increment = {"Monthly": 1, "Quarterly": 3, "Half-Yearly": 6, "Yearly": 12}.get(
-            self.filters.range, 1
-        )
-
-        if self.filters.range in ["Monthly", "Quarterly"]:
-            from_date = from_date.replace(day=1)
-        elif self.filters.range == "Yearly":
-            from_date = get_fiscal_year(from_date)[1]
-        else:
-            from_date = from_date + relativedelta(from_date, weekday=MO(-1))
-
-        self.periodic_daterange = []
-        for dummy in range(1, 53):
-            if self.filters.range == "Weekly":
-                period_end_date = add_days(from_date, 6)
-            else:
-                period_end_date = add_to_date(from_date, months=increment, days=-1)
-
-            if period_end_date > to_date:
-                period_end_date = to_date
-
-            self.periodic_daterange.append(period_end_date)
-
-            from_date = add_days(period_end_date, 1)
-            if period_end_date == to_date:
-                break
-
-    def get_groups(self):
-        if self.filters.tree_type == "Territory":
-            parent = "parent_territory"
-        if self.filters.tree_type == "Customer Group":
-            parent = "parent_customer_group"
-        if self.filters.tree_type == "Item Group":
-            parent = "parent_item_group"
-        if self.filters.tree_type == "Supplier Group":
-            parent = "parent_supplier_group"
-
-        self.depth_map = frappe._dict()
-
-        self.group_entries = frappe.db.sql(
-            """select name, lft, rgt , {parent} as parent
-			from `tab{tree}` order by lft""".format(
-                tree=self.filters.tree_type, parent=parent
-            ),
-            as_dict=1,
-        )
-
-        for d in self.group_entries:
-            if d.parent:
-                self.depth_map.setdefault(d.name, self.depth_map.get(d.parent) + 1)
-            else:
-                self.depth_map.setdefault(d.name, 0)
-
-    def get_teams(self):
-        self.depth_map = frappe._dict()
-
-        self.group_entries = frappe.db.sql(
-            """ select * from (select "Order Types" as name, 0 as lft,
-			2 as rgt, '' as parent union select distinct order_type as name, 1 as lft, 1 as rgt, "Order Types" as parent
-			from `tab{doctype}` where ifnull(order_type, '') != '') as b order by lft, name
-		""".format(
-                doctype=self.filters.doc_type
-            ),
-            as_dict=1,
-        )
-
-        for d in self.group_entries:
-            if d.parent:
-                self.depth_map.setdefault(d.name, self.depth_map.get(d.parent) + 1)
-            else:
-                self.depth_map.setdefault(d.name, 0)
-
-    def get_supplier_parent_child_map(self):
-        self.parent_child_map = frappe._dict(
-            frappe.db.sql(""" select name, supplier_group from `tabSupplier`""")
-        )
-
-    def get_chart_data(self):
-        length = len(self.columns)
-
-        if self.filters.tree_type in ["Customer", "Supplier"]:
-            labels = [d.get("label") for d in self.columns[2 : length - 1]]
-        elif self.filters.tree_type == "Item":
-            labels = [d.get("label") for d in self.columns[3 : length - 1]]
-        else:
-            labels = [d.get("label") for d in self.columns[1 : length - 1]]
-        self.chart = {"data": {"labels": labels, "datasets": []}, "type": "line"}
+        frappe.msgprint(query)
+        self.data = frappe.db.sql(query, as_dict=1)
