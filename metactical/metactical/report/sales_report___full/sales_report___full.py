@@ -301,5 +301,4 @@ class Analytics(object):
             from_date=str(start_date),
             to_date=str(end_date),
         )
-        frappe.msgprint(query)
         self.data = frappe.db.sql(query, as_dict=1)
