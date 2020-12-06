@@ -3,64 +3,71 @@ import frappe
 
 def get_context(context):
     context.no_cache = True
-    context.username = "Palash"
     search_text = frappe.request.args["searchtext"]
     items = get_items(search_text)
     if "columns" in items and "data" in items:
         context.columns = items["columns"]
         context.data = items["data"]
 
+
 def get_items(search_value=""):
     data = dict()
-
-    if search_value:
-        data = search_barcode(search_value)
-
-    item_code = data.get("item_code") if data.get("item_code") else search_value
-    barcode = data.get("barcode") if data.get("barcode") else ""
-
-    condition = get_conditions(item_code, barcode)
-
     result = []
 
-    items_data = frappe.db.sql(
-        """
-		SELECT
-			name AS item_code,
-			item_name,
-			stock_uom,
-			idx AS idx,
-			is_stock_item,
-            ifw_retailskusuffix,
-            ifw_location,
-            variant_of
-		FROM
-			`tabItem`
+    query = """
+        SELECT
+        it1.item_code,
+        it1.item_name,
+        it1.stock_uom,
+        it1.idx AS idx,
+        it1.is_stock_item,
+        it1.ifw_retailskusuffix,
+        it1.ifw_location,
+        it1.variant_of,
+        it1.barcode,
+        ip.price_list_rate,
+        ip.currency from 
+		(
+            SELECT
+			it.item_code,
+			it.item_name,
+			it.stock_uom,
+			it.idx AS idx,
+			it.is_stock_item,
+            it.ifw_retailskusuffix,
+            it.ifw_location,
+            it.variant_of,
+            ib.barcode,
+            it.disabled,
+            it.has_variants,
+            it.is_sales_item
+		    FROM
+			    `tabItem` it
+            LEFT JOIN
+                `tabItem Barcode` ib
+            ON ib.parent = it.name 
+            where ib.barcode = "{search_text}" or it.ifw_retailskusuffix like "{search_text}%"
+        ) it1
+        LEFT JOIN
+            `tabItem Price` ip
+            on ip.item_code = it1.item_code and ip.price_list = "RET - Camo"
 		WHERE
-			disabled = 0
-				AND has_variants = 0
-				AND is_sales_item = 1
-				AND {condition}
+            it1.disabled = 0
+			AND it1.has_variants = 0
+			AND it1.is_sales_item = 1
 		ORDER BY
-			idx desc""".format(
-            condition=condition
-        ),
-        as_dict=1,
-    )
+			it1.idx desc""".format(
+            search_text=search_value
+        )
+    items_data = frappe.db.sql(query ,as_dict=1)
 
     if items_data:
         table_columns = ["RetailSKU Suffix", "Item Name", "Price"]
         table_data = []
         items = [d.item_code for d in items_data]
-        item_prices_data = frappe.get_all(
-            "Item Price",
-            fields=["item_code", "price_list_rate", "currency"],
-            filters={"price_list": "Standard Selling", "item_code": ["in", items]},
-        )
 
-        item_prices, bin_data = {}, {}
-        for d in item_prices_data:
-            item_prices[d.item_code] = d
+        bin_data = {}
+
         # prepare filter for bin query
         bin_filters = {"item_code": ["in", items]}
 
@@ -69,7 +76,7 @@ def get_items(search_value=""):
             "Bin",
             fields=["item_code", "warehouse", "sum(actual_qty) as actual_qty"],
             filters=bin_filters,
-            group_by="item_code, warehouse"
+            group_by="item_code, warehouse",
         )
 
         warehouse_wise_items = {}
@@ -84,26 +91,29 @@ def get_items(search_value=""):
                 warehouse_wise_items[warehouse] = {}
             warehouse_wise_items[warehouse][item_code] = qty
             bin_dict[b.get("item_code")] = b.get("actual_qty")
-        
+
         warehouses = warehouse_wise_items.keys()
 
         for warehouse in warehouses:
+            if warehouse.find("-Active Stock") == -1:
+                continue
             table_columns.append(warehouse)
-        
+
         table_columns.extend(["IFW_location", "ERPItemCode", "ERPNextTemplateSKU"])
 
         for item in items_data:
             item_row = []
             item_code = item.item_code
             item_name = item.item_name
+            item_price = item.price_list_rate
             retail_skusuffix = item.ifw_retailskusuffix
-            ifw_location = item.ifw_location   
-            variant_of = item.variant_of 
-            item_price = 0.0
-            if item_code in item_prices:
-                item_price = item_prices[item_code]["price_list_rate"]        
+            ifw_location = item.ifw_location
+            variant_of = item.variant_of
+
             item_row.extend([retail_skusuffix, item_name, item_price])
             for warehouse in warehouses:
+                if warehouse.find("-Active Stock") == -1:
+                    continue
                 warehouse_qty = 0.0
                 if item_code in warehouse_wise_items[warehouse]:
                     warehouse_qty = warehouse_wise_items[warehouse][item_code]
@@ -116,6 +126,7 @@ def get_items(search_value=""):
         return res
     else:
         return {}
+
 
 def search_barcode(search_value):
     # search barcode no
@@ -130,8 +141,11 @@ def search_barcode(search_value):
 
     return {}
 
+
 def get_conditions(item_code, barcode):
     if barcode:
         return "name = {0}".format(frappe.db.escape(item_code))
 
-    return "ifw_retailskusuffix like {0}".format(frappe.db.escape('%' + item_code + '%'))
+    return "ifw_retailskusuffix like {0}".format(
+        frappe.db.escape("%" + item_code + "%")
+    )
